@@ -137,7 +137,7 @@ void delete_and_consolidate(diskann::AbstractIndex &index, diskann::IndexWritePa
     {
         std::cout << std::endl << "Lazy deleting points " << start << " to " << end << "... ";
         for (size_t i = start; i < end; ++i)
-            index.lazy_delete(static_cast<TagT>(1 + i));
+            index.inplace_delete(static_cast<TagT>(1 + i));
         std::cout << "lazy delete done." << std::endl;
 
         auto report = index.consolidate_deletes(delete_params);

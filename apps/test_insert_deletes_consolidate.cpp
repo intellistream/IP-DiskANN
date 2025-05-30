@@ -125,7 +125,7 @@ void delete_from_beginning(diskann::AbstractIndex &index, diskann::IndexWritePar
                   << "Lazy deleting points " << points_to_skip << " to "
                   << points_to_skip + points_to_delete_from_beginning << "... ";
         for (size_t i = points_to_skip; i < points_to_skip + points_to_delete_from_beginning; ++i)
-            index.lazy_delete(static_cast<TagT>(i + 1)); // Since tags are data location + 1
+            index.inplace_delete(static_cast<TagT>(i + 1)); // Since tags are data location + 1
         std::cout << "done." << std::endl;
 
         auto report = index.consolidate_deletes(delete_params);

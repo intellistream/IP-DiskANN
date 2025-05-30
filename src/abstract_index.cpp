@@ -66,19 +66,19 @@ int AbstractIndex::insert_point(const data_type *point, const tag_type tag, cons
     return this->_insert_point(any_point, any_tag, any_labels);
 }
 
-template <typename tag_type> int AbstractIndex::lazy_delete(const tag_type &tag)
-{
-    auto any_tag = std::any(tag);
-    return this->_lazy_delete(any_tag);
-}
+// template <typename tag_type> int AbstractIndex::lazy_delete(const tag_type &tag)
+// {
+//     auto any_tag = std::any(tag);
+//     return this->_lazy_delete(any_tag);
+// }
 
-template <typename tag_type>
-void AbstractIndex::lazy_delete(const std::vector<tag_type> &tags, std::vector<tag_type> &failed_tags)
-{
-    auto any_tags = TagVector(tags);
-    auto any_failed_tags = TagVector(failed_tags);
-    this->_lazy_delete(any_tags, any_failed_tags);
-}
+// template <typename tag_type>
+// void AbstractIndex::lazy_delete(const std::vector<tag_type> &tags, std::vector<tag_type> &failed_tags)
+// {
+//     auto any_tags = TagVector(tags);
+//     auto any_failed_tags = TagVector(failed_tags);
+//     this->_lazy_delete(any_tags, any_failed_tags);
+// }
 
 template <typename tag_type>
 int AbstractIndex::inplace_delete(const tag_type &tag, const uint32_t l_d, const uint32_t k, const uint32_t c)
@@ -306,19 +306,19 @@ template DISKANN_DLLEXPORT int AbstractIndex::insert_point<uint8_t, uint64_t, ui
 template DISKANN_DLLEXPORT int AbstractIndex::insert_point<int8_t, uint64_t, uint32_t>(
     const int8_t *point, const uint64_t tag, const std::vector<uint32_t> &labels);
 
-template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<int32_t>(const int32_t &tag);
-template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<uint32_t>(const uint32_t &tag);
-template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<int64_t>(const int64_t &tag);
-template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<uint64_t>(const uint64_t &tag);
+// template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<int32_t>(const int32_t &tag);
+// template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<uint32_t>(const uint32_t &tag);
+// template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<int64_t>(const int64_t &tag);
+// template DISKANN_DLLEXPORT int AbstractIndex::lazy_delete<uint64_t>(const uint64_t &tag);
 
-template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<int32_t>(const std::vector<int32_t> &tags,
-                                                                    std::vector<int32_t> &failed_tags);
-template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<uint32_t>(const std::vector<uint32_t> &tags,
-                                                                     std::vector<uint32_t> &failed_tags);
-template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<int64_t>(const std::vector<int64_t> &tags,
-                                                                    std::vector<int64_t> &failed_tags);
-template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<uint64_t>(const std::vector<uint64_t> &tags,
-                                                                     std::vector<uint64_t> &failed_tags);
+// template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<int32_t>(const std::vector<int32_t> &tags,
+//                                                                     std::vector<int32_t> &failed_tags);
+// template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<uint32_t>(const std::vector<uint32_t> &tags,
+//                                                                      std::vector<uint32_t> &failed_tags);
+// template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<int64_t>(const std::vector<int64_t> &tags,
+//                                                                     std::vector<int64_t> &failed_tags);
+// template DISKANN_DLLEXPORT void AbstractIndex::lazy_delete<uint64_t>(const std::vector<uint64_t> &tags,
+//                                                                      std::vector<uint64_t> &failed_tags);
 
 template DISKANN_DLLEXPORT int AbstractIndex::inplace_delete<int32_t>(const int32_t &tag, const uint32_t l_d, const uint32_t k, const uint32_t c);
 template DISKANN_DLLEXPORT int AbstractIndex::inplace_delete<uint32_t>(const uint32_t &tag, const uint32_t l_d, const uint32_t k, const uint32_t c);

@@ -86,12 +86,12 @@ class AbstractIndex
     // insert point for unfiltered index build. do not use with filtered index
     template <typename data_type, typename tag_type> int insert_point(const data_type *point, const tag_type tag);
 
-    // delete point with tag, or return -1 if point can not be deleted
-    template <typename tag_type> int lazy_delete(const tag_type &tag);
+    // // delete point with tag, or return -1 if point can not be deleted
+    // template <typename tag_type> int lazy_delete(const tag_type &tag);
 
-    // batch delete tags and populates failed tags if unabke to delete given tags.
-    template <typename tag_type>
-    void lazy_delete(const std::vector<tag_type> &tags, std::vector<tag_type> &failed_tags);
+    // // batch delete tags and populates failed tags if unabke to delete given tags.
+    // template <typename tag_type>
+    // void lazy_delete(const std::vector<tag_type> &tags, std::vector<tag_type> &failed_tags);
 
     // delete point in-place using IP-DiskANN algorithm, or return -1 if point can not be deleted
     template <typename tag_type> int inplace_delete(const tag_type &tag, const uint32_t l_d = 128, const uint32_t k = 50, const uint32_t c = 3);
@@ -123,8 +123,8 @@ class AbstractIndex
                                                                float *distances) = 0;
     virtual int _insert_point(const DataType &data_point, const TagType tag, Labelvector &labels) = 0;
     virtual int _insert_point(const DataType &data_point, const TagType tag) = 0;
-    virtual int _lazy_delete(const TagType &tag) = 0;
-    virtual void _lazy_delete(TagVector &tags, TagVector &failed_tags) = 0;
+    // virtual int _lazy_delete(const TagType &tag) = 0;
+    // virtual void _lazy_delete(TagVector &tags, TagVector &failed_tags) = 0;
     virtual int _inplace_delete(const TagType &tag, const uint32_t l_d, const uint32_t k, const uint32_t c) = 0;
     virtual void _inplace_delete(TagVector &tags, TagVector &failed_tags, const uint32_t l_d, const uint32_t k, const uint32_t c) = 0;
     virtual void _get_active_tags(TagRobinSet &active_tags) = 0;

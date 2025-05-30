@@ -2377,6 +2377,37 @@ inline void Index<T, TagT, LabelT>::process_delete(const tsl::robin_set<uint32_t
     }
 }
 
+// New lightweight consolidation function: simply remove deleted neighbors
+// Implements Algorithm 2 from algos.tex: For each p in P\D: N_out(p) = N_out(p) \ D
+template <typename T, typename TagT, typename LabelT>
+inline void Index<T, TagT, LabelT>::remove_deleted_neighbors(const tsl::robin_set<uint32_t> &delete_set, size_t loc)
+{
+    std::unique_lock<non_recursive_mutex> adj_list_lock;
+    if (_conc_consolidate)
+        adj_list_lock = std::unique_lock<non_recursive_mutex>(_locks[loc]);
+    
+    // Get current neighbors
+    std::vector<uint32_t> current_neighbors = _graph_store->get_neighbours((location_t)loc);
+    
+    // Remove deleted neighbors
+    std::vector<uint32_t> updated_neighbors;
+    updated_neighbors.reserve(current_neighbors.size());
+    
+    for (uint32_t neighbor : current_neighbors)
+    {
+        if (delete_set.find(neighbor) == delete_set.end())
+        {
+            updated_neighbors.push_back(neighbor);
+        }
+    }
+    
+    // Update neighbor list if any neighbors were removed
+    if (updated_neighbors.size() != current_neighbors.size())
+    {
+        _graph_store->set_neighbours((location_t)loc, updated_neighbors);
+    }
+}
+
 // Returns number of live points left after consolidation
 template <typename T, typename TagT, typename LabelT>
 consolidation_report Index<T, TagT, LabelT>::consolidate_deletes(const IndexWriteParameters &params)
@@ -2432,31 +2463,25 @@ consolidation_report Index<T, TagT, LabelT>::consolidate_deletes(const IndexWrit
     if (old_delete_set->find(_start) != old_delete_set->end())
     {
         throw diskann::ANNException("ERROR: start node has been deleted", -1, __FUNCSIG__, __FILE__, __LINE__);
-    }
-
-    const uint32_t range = params.max_degree;
-    const uint32_t maxc = params.max_occlusion_size;
-    const float alpha = params.alpha;
-    const uint32_t num_threads = params.num_threads == 0 ? omp_get_num_procs() : params.num_threads;
+    }    const uint32_t num_threads = params.num_threads == 0 ? omp_get_num_procs() : params.num_threads;
 
     uint32_t num_calls_to_process_delete = 0;
     diskann::Timer timer;
+    
+    // New lightweight consolidation: simply remove deleted points from neighbor lists
+    // For each point p in P \ D: N_out(p) = N_out(p) \ D
 #pragma omp parallel for num_threads(num_threads) schedule(dynamic, 8192) reduction(+ : num_calls_to_process_delete)
     for (int64_t loc = 0; loc < (int64_t)_max_points; loc++)
     {
         if (old_delete_set->find((uint32_t)loc) == old_delete_set->end() && !_empty_slots.is_in_set((uint32_t)loc))
         {
-            ScratchStoreManager<InMemQueryScratch<T>> manager(_query_scratch);
-            auto scratch = manager.scratch_space();
-            process_delete(*old_delete_set, loc, range, maxc, alpha, scratch);
+            remove_deleted_neighbors(*old_delete_set, loc);
             num_calls_to_process_delete += 1;
         }
     }
     for (int64_t loc = _max_points; loc < (int64_t)(_max_points + _num_frozen_pts); loc++)
     {
-        ScratchStoreManager<InMemQueryScratch<T>> manager(_query_scratch);
-        auto scratch = manager.scratch_space();
-        process_delete(*old_delete_set, loc, range, maxc, alpha, scratch);
+        remove_deleted_neighbors(*old_delete_set, loc);
         num_calls_to_process_delete += 1;
     }
 
@@ -3023,83 +3048,83 @@ int Index<T, TagT, LabelT>::insert_point(const T *point, const TagT tag, const s
     return 0;
 }
 
-template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>::_lazy_delete(const TagType &tag)
-{
-    try
-    {
-        return lazy_delete(std::any_cast<const TagT>(tag));
-    }
-    catch (const std::bad_any_cast &e)
-    {
-        throw ANNException(std::string("Error: ") + e.what(), -1);
-    }
-}
+// template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>::_lazy_delete(const TagType &tag)
+// {
+//     try
+//     {
+//         return lazy_delete(std::any_cast<const TagT>(tag));
+//     }
+//     catch (const std::bad_any_cast &e)
+//     {
+//         throw ANNException(std::string("Error: ") + e.what(), -1);
+//     }
+// }
 
-template <typename T, typename TagT, typename LabelT>
-void Index<T, TagT, LabelT>::_lazy_delete(TagVector &tags, TagVector &failed_tags)
-{
-    try
-    {
-        this->lazy_delete(tags.get<const std::vector<TagT>>(), failed_tags.get<std::vector<TagT>>());
-    }
-    catch (const std::bad_any_cast &e)
-    {
-        throw ANNException("Error: bad any cast while performing _lazy_delete() " + std::string(e.what()), -1);
-    }
-    catch (const std::exception &e)
-    {
-        throw ANNException("Error: " + std::string(e.what()), -1);
-    }
-}
+// template <typename T, typename TagT, typename LabelT>
+// void Index<T, TagT, LabelT>::_lazy_delete(TagVector &tags, TagVector &failed_tags)
+// {
+//     try
+//     {
+//         this->lazy_delete(tags.get<const std::vector<TagT>>(), failed_tags.get<std::vector<TagT>>());
+//     }
+//     catch (const std::bad_any_cast &e)
+//     {
+//         throw ANNException("Error: bad any cast while performing _lazy_delete() " + std::string(e.what()), -1);
+//     }
+//     catch (const std::exception &e)
+//     {
+//         throw ANNException("Error: " + std::string(e.what()), -1);
+//     }
+// }
 
-template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>::lazy_delete(const TagT &tag)
-{
-    std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
-    std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
-    std::unique_lock<std::shared_timed_mutex> dl(_delete_lock);
-    _data_compacted = false;
+// template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>::lazy_delete(const TagT &tag)
+// {
+//     std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
+//     std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
+//     std::unique_lock<std::shared_timed_mutex> dl(_delete_lock);
+//     _data_compacted = false;
 
-    if (_tag_to_location.find(tag) == _tag_to_location.end())
-    {
-        diskann::cerr << "Delete tag not found " << get_tag_string(tag) << std::endl;
-        return -1;
-    }
-    assert(_tag_to_location[tag] < _max_points);
+//     if (_tag_to_location.find(tag) == _tag_to_location.end())
+//     {
+//         diskann::cerr << "Delete tag not found " << get_tag_string(tag) << std::endl;
+//         return -1;
+//     }
+//     assert(_tag_to_location[tag] < _max_points);
 
-    const auto location = _tag_to_location[tag];
-    _delete_set->insert(location);
-    _location_to_tag.erase(location);
-    _tag_to_location.erase(tag);
-    return 0;
-}
+//     const auto location = _tag_to_location[tag];
+//     _delete_set->insert(location);
+//     _location_to_tag.erase(location);
+//     _tag_to_location.erase(tag);
+//     return 0;
+// }
 
-template <typename T, typename TagT, typename LabelT>
-void Index<T, TagT, LabelT>::lazy_delete(const std::vector<TagT> &tags, std::vector<TagT> &failed_tags)
-{
-    if (failed_tags.size() > 0)
-    {
-        throw ANNException("failed_tags should be passed as an empty list", -1, __FUNCSIG__, __FILE__, __LINE__);
-    }
-    std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
-    std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
-    std::unique_lock<std::shared_timed_mutex> dl(_delete_lock);
-    _data_compacted = false;
+// template <typename T, typename TagT, typename LabelT>
+// void Index<T, TagT, LabelT>::lazy_delete(const std::vector<TagT> &tags, std::vector<TagT> &failed_tags)
+// {
+//     if (failed_tags.size() > 0)
+//     {
+//         throw ANNException("failed_tags should be passed as an empty list", -1, __FUNCSIG__, __FILE__, __LINE__);
+//     }
+//     std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
+//     std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
+//     std::unique_lock<std::shared_timed_mutex> dl(_delete_lock);
+//     _data_compacted = false;
 
-    for (auto tag : tags)
-    {
-        if (_tag_to_location.find(tag) == _tag_to_location.end())
-        {
-            failed_tags.push_back(tag);
-        }
-        else
-        {
-            const auto location = _tag_to_location[tag];
-            _delete_set->insert(location);
-            _location_to_tag.erase(location);
-            _tag_to_location.erase(tag);
-        }
-    }
-}
+//     for (auto tag : tags)
+//     {
+//         if (_tag_to_location.find(tag) == _tag_to_location.end())
+//         {
+//             failed_tags.push_back(tag);
+//         }
+//         else
+//         {
+//             const auto location = _tag_to_location[tag];
+//             _delete_set->insert(location);
+//             _location_to_tag.erase(location);
+//             _tag_to_location.erase(tag);
+//         }
+//     }
+// }
 
 template <typename T, typename TagT, typename LabelT>
 int Index<T, TagT, LabelT>::inplace_delete(const TagT &tag, const uint32_t l_d, const uint32_t k, const uint32_t c)

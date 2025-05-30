@@ -221,9 +221,9 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     virtual int _insert_point(const DataType &data_point, const TagType tag) override;
     virtual int _insert_point(const DataType &data_point, const TagType tag, Labelvector &labels) override;
 
-    virtual int _lazy_delete(const TagType &tag) override;
+    // virtual int _lazy_delete(const TagType &tag) override;
 
-    virtual void _lazy_delete(TagVector &tags, TagVector &failed_tags) override;
+    // virtual void _lazy_delete(TagVector &tags, TagVector &failed_tags) override;
 
     virtual int _inplace_delete(const TagType &tag, const uint32_t l_d, const uint32_t k, const uint32_t c) override;
 
@@ -314,13 +314,15 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     // graph, mode = _consolidated_order in case of lazy deletion and
     // _compacted_order in case of eager deletion
     DISKANN_DLLEXPORT void compact_data();
-    DISKANN_DLLEXPORT void compact_frozen_point();
-
-    // Remove deleted nodes from adjacency list of node loc
+    DISKANN_DLLEXPORT void compact_frozen_point();    // Remove deleted nodes from adjacency list of node loc
     // Replace removed neighbors with second order neighbors.
     // Also acquires _locks[i] for i = loc and out-neighbors of loc.
     void process_delete(const tsl::robin_set<uint32_t> &old_delete_set, size_t loc, const uint32_t range,
                         const uint32_t maxc, const float alpha, InMemQueryScratch<T> *scratch);
+
+    // New lightweight consolidation: simply remove deleted neighbors from adjacency list
+    // Implements Algorithm 2 from algos.tex: For each p in P\D: N_out(p) = N_out(p) \ D
+    void remove_deleted_neighbors(const tsl::robin_set<uint32_t> &delete_set, size_t loc);
 
     void initialize_query_scratch(uint32_t num_threads, uint32_t search_l, uint32_t indexing_l, uint32_t r,
                                   uint32_t maxc, size_t dim);
