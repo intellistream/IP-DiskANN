@@ -162,6 +162,13 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     // if tag not found.
     DISKANN_DLLEXPORT void lazy_delete(const std::vector<TagT> &tags, std::vector<TagT> &failed_tags);
 
+    // Delete point in-place using IP-DiskANN algorithm. Return -1 if tag not found, 0 if OK.
+    DISKANN_DLLEXPORT int inplace_delete(const TagT &tag, const uint32_t l_d = 128, const uint32_t k = 50, const uint32_t c = 3);
+
+    // Delete points in-place using IP-DiskANN algorithm. Add to failed_tags if tag not found.
+    DISKANN_DLLEXPORT void inplace_delete(const std::vector<TagT> &tags, std::vector<TagT> &failed_tags, 
+                                         const uint32_t l_d = 128, const uint32_t k = 50, const uint32_t c = 3);
+
     // Call after a series of lazy deletions
     // Returns number of live points left after consolidation
     // If _conc_consolidates is set in the ctor, then this call can be invoked
@@ -217,6 +224,10 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     virtual int _lazy_delete(const TagType &tag) override;
 
     virtual void _lazy_delete(TagVector &tags, TagVector &failed_tags) override;
+
+    virtual int _inplace_delete(const TagType &tag, const uint32_t l_d, const uint32_t k, const uint32_t c) override;
+
+    virtual void _inplace_delete(TagVector &tags, TagVector &failed_tags, const uint32_t l_d, const uint32_t k, const uint32_t c) override;
 
     virtual void _get_active_tags(TagRobinSet &active_tags) override;
 

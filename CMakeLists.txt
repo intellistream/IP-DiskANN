@@ -97,6 +97,10 @@ if (MSVC)
 endif()
 
 if(NOT MSVC)
+    # Set policy to suppress FindBoost deprecation warning
+    if(POLICY CMP0167)
+        cmake_policy(SET CMP0167 NEW)
+    endif()
     find_package(Boost COMPONENTS program_options)
 endif()
 

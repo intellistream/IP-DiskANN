@@ -2582,9 +2582,10 @@ template <typename T, typename TagT, typename LabelT> void Index<T, TagT, LabelT
                 assert(new_location[old] < old);
                 _graph_store->swap_neighbours(new_location[old], (location_t)old);
 
-                if (_filtered_index)
+                if (_filtered_index && _dynamic_index)
                 {
-                    _location_to_labels[new_location[old]].swap(_location_to_labels[old]);
+                    _location_to_labels[new_location[old]].swap(
+                        _location_to_labels[old]);
                 }
 
                 _data_store->copy_vectors(old, new_location[old], 1);
@@ -3100,6 +3101,233 @@ void Index<T, TagT, LabelT>::lazy_delete(const std::vector<TagT> &tags, std::vec
     }
 }
 
+template <typename T, typename TagT, typename LabelT>
+int Index<T, TagT, LabelT>::inplace_delete(const TagT &tag, const uint32_t l_d, const uint32_t k, const uint32_t c)
+{
+    std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
+    std::shared_lock<std::shared_timed_mutex> tl(_tag_lock);
+    std::shared_lock<std::shared_timed_mutex> dl(_delete_lock);
+
+    
+    // Find the location of the tag in the index
+    auto location_iter = _tag_to_location.find(tag);
+    if (location_iter == _tag_to_location.end()) {
+        diskann::cout << "Delete tag " << get_tag_string(tag) << " not found" << std::endl;
+        return -1;
+    }
+    
+    uint32_t p = location_iter->second;
+    
+    // Check if point is already deleted
+    if (_delete_set->find(p) != _delete_set->end()) {
+        diskann::cout << "Point " << p << " is already deleted" << std::endl;
+        return -1;
+    }
+    
+    // Step 1: Run GreedySearch to get Visited and Candidates
+    // [Visited, Candidates] ← GreedySearch(G, x_p, k, l_d)
+    ScratchStoreManager<InMemQueryScratch<T>> manager(_query_scratch);
+    auto scratch = manager.scratch_space();
+      // Set up the query in scratch space (using the point to delete as query)
+    _data_store->get_vector(p, scratch->aligned_query());
+    T *point_data = scratch->aligned_query();
+    _data_store->preprocess_query(point_data, scratch);
+      // Get entry points
+    std::vector<uint32_t> init_ids = get_init_ids();
+      // Run GreedySearch (which is search)
+    auto result = iterate_to_fixed_point(scratch, l_d, init_ids, false, std::vector<LabelT>(), false);
+    
+    // Get the search results - these are our Candidates (closest k points to x_p)
+    auto& candidates_pq = scratch->best_l_nodes();
+    std::vector<Neighbor> candidates;
+    for (size_t i = 0; i < std::min((size_t)k, candidates_pq.size()); i++) {
+        candidates.push_back(candidates_pq[i]);
+    }
+    
+    // Get visited nodes from the expanded pool
+    auto& visited_nodes = scratch->pool();
+    std::vector<uint32_t> visited;
+    for (const auto& node : visited_nodes) {
+        visited.push_back(node.id);
+    }
+    
+    // Step 2: Find N'_in(p) = {z ∈ Visited : p ∈ N_out(z)}
+    std::vector<uint32_t> approx_in_neighbors;
+    for (uint32_t z : visited) {
+        if (_delete_set->find(z) != _delete_set->end()) continue;
+        
+        const auto& z_neighbors = _graph_store->get_neighbours(z);
+        for (uint32_t neighbor : z_neighbors) {
+            if (neighbor == p) {
+                approx_in_neighbors.push_back(z);
+                break;
+            }
+        }
+    }
+      // Step 3: For each z ∈ N'_in(p)
+    // C_z ← closest-c points to x_z in Candidates
+    // N_out(z) ← N_out(z) ∪ C_z \ {p}
+    for (uint32_t z : approx_in_neighbors) {
+        // Find closest-c points to x_z in Candidates
+        std::vector<Neighbor> z_candidates;
+        for (const auto& candidate : candidates) {
+            if (candidate.id != p && candidate.id != z && 
+                _delete_set->find(candidate.id) == _delete_set->end()) {
+                float dist = _data_store->get_distance(z, candidate.id);
+                z_candidates.emplace_back(candidate.id, dist);
+            }
+        }
+        
+        // Sort and take top-c
+        std::sort(z_candidates.begin(), z_candidates.end());
+        size_t num_to_add = std::min((size_t)c, z_candidates.size());
+        
+        // Add edges from z to C_z
+        auto current_neighbors = _graph_store->get_neighbours(z);
+        std::vector<uint32_t> updated_neighbors = current_neighbors;
+        
+        // Remove p from z's neighbors
+        updated_neighbors.erase(std::remove(updated_neighbors.begin(), updated_neighbors.end(), p), updated_neighbors.end());
+        
+        // Add new candidates
+        for (size_t i = 0; i < num_to_add; i++) {
+            uint32_t candidate_id = z_candidates[i].id;
+            if (std::find(updated_neighbors.begin(), updated_neighbors.end(), candidate_id) == updated_neighbors.end()) {
+                updated_neighbors.push_back(candidate_id);
+            }
+        }
+        
+        _graph_store->set_neighbours(z, updated_neighbors);
+    }
+      // Step 4: For each w ∈ N_out(p)
+    // C_w ← closest-c points to x_w in Candidates
+    // For each y ∈ C_w: N_out(y) ← N_out(y) ∪ {w}
+    const auto& out_neighbors = _graph_store->get_neighbours(p);
+    for (uint32_t w : out_neighbors) {
+        if (_delete_set->find(w) != _delete_set->end()) continue;
+        
+        // Find closest-c points to x_w in Candidates  
+        std::vector<Neighbor> w_candidates;
+        for (const auto& candidate : candidates) {
+            if (candidate.id != p && candidate.id != w && 
+                _delete_set->find(candidate.id) == _delete_set->end()) {
+                float dist = _data_store->get_distance(w, candidate.id);
+                w_candidates.emplace_back(candidate.id, dist);
+            }
+        }
+        
+        // Sort and take top-c
+        std::sort(w_candidates.begin(), w_candidates.end());
+        size_t num_to_add = std::min((size_t)c, w_candidates.size());
+        
+        // For each y ∈ C_w: add edge y → w
+        for (size_t i = 0; i < num_to_add; i++) {
+            uint32_t y = w_candidates[i].id;
+            auto y_neighbors = _graph_store->get_neighbours(y);
+            std::vector<uint32_t> updated_y_neighbors = y_neighbors;
+            
+            if (std::find(updated_y_neighbors.begin(), updated_y_neighbors.end(), w) == updated_y_neighbors.end()) {
+                updated_y_neighbors.push_back(w);
+                _graph_store->set_neighbours(y, updated_y_neighbors);
+            }
+        }
+    }
+      // Step 5: Remove vertex p from G (immediately)
+    _graph_store->clear_neighbours(p);
+    _delete_set->insert(p);
+    _tag_to_location.erase(location_iter);
+    _location_to_tag.erase(p);
+    
+    // Step 6: For any updated vertex v that exceeds degree bound R, 
+    // N_out(v) ← RobustPrune(G, v, N_out(v), R, α)
+    std::set<uint32_t> vertices_to_prune;
+    
+    // Collect all vertices that might need pruning
+    for (uint32_t z : approx_in_neighbors) {
+        vertices_to_prune.insert(z);
+    }
+    for (const auto& candidate : candidates) {
+        if (candidate.id != p && _delete_set->find(candidate.id) == _delete_set->end()) {
+            vertices_to_prune.insert(candidate.id);
+        }
+    }
+      // Prune vertices that exceed degree bound
+    for (uint32_t v : vertices_to_prune) {
+        const auto& v_neighbors = _graph_store->get_neighbours(v);        
+        if (v_neighbors.size() > _indexingRange) {
+            // Apply RobustPrune using existing prune_neighbors function
+            std::vector<Neighbor> neighbor_candidates;
+            for (uint32_t neighbor : v_neighbors) {
+                if (_delete_set->find(neighbor) == _delete_set->end()) {
+                    float dist = _data_store->get_distance(v, neighbor);
+                    neighbor_candidates.emplace_back(neighbor, dist);
+                }
+            }
+            
+            // Use the existing prune_neighbors function which calls occlude_list internally
+            std::vector<uint32_t> pruned_list;
+            prune_neighbors(v, neighbor_candidates, _indexingRange, _indexingMaxC, _indexingAlpha, pruned_list, scratch);
+            
+            _graph_store->set_neighbours(v, pruned_list);
+        }
+    }
+    
+    diskann::cout << "Successfully deleted point with tag " << get_tag_string(tag) << " (id: " << p 
+                  << "), found " << approx_in_neighbors.size() << " approximate in-neighbors" << std::endl;
+    return 0;
+}
+
+template <typename T, typename TagT, typename LabelT>
+void Index<T, TagT, LabelT>::inplace_delete(const std::vector<TagT> &tags, std::vector<TagT> &failed_tags, 
+                                         const uint32_t l_d, const uint32_t k, const uint32_t c) 
+{
+    failed_tags.clear();
+    
+    // Process each tag for deletion
+    for (const auto& tag : tags) {
+        int result = inplace_delete(tag, l_d, k, c);
+        if (result != 0) {
+            failed_tags.push_back(tag);
+        }
+    }
+    
+    if (!failed_tags.empty()) {
+        diskann::cout << "Failed to delete " << failed_tags.size() << " out of " << tags.size() << " points" << std::endl;
+    } else {
+        diskann::cout << "Successfully deleted all " << tags.size() << " points" << std::endl;
+    }
+}
+
+template <typename T, typename TagT, typename LabelT> 
+int Index<T, TagT, LabelT>::_inplace_delete(const TagType &tag, const uint32_t l_d, const uint32_t k, const uint32_t c)
+{
+    try
+    {
+        return inplace_delete(std::any_cast<const TagT>(tag), l_d, k, c);
+    }
+    catch (const std::bad_any_cast &e)
+    {
+        throw ANNException(std::string("Error: ") + e.what(), -1);
+    }
+}
+
+template <typename T, typename TagT, typename LabelT>
+void Index<T, TagT, LabelT>::_inplace_delete(TagVector &tags, TagVector &failed_tags, const uint32_t l_d, const uint32_t k, const uint32_t c)
+{
+    try
+    {
+        this->inplace_delete(tags.get<const std::vector<TagT>>(), failed_tags.get<std::vector<TagT>>(), l_d, k, c);
+    }
+    catch (const std::bad_any_cast &e)
+    {
+        throw ANNException("Error: bad any cast while performing _inplace_delete() " + std::string(e.what()), -1);
+    }
+    catch (const std::exception &e)
+    {
+        throw ANNException("Error: " + std::string(e.what()), -1);
+    }
+}
+
 template <typename T, typename TagT, typename LabelT> bool Index<T, TagT, LabelT>::is_index_saved()
 {
     return _is_saved;
@@ -3394,7 +3622,7 @@ template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t,
     const int8_t *query, const size_t K, const uint32_t L, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t, uint32_t>::search<uint32_t>(
     const int8_t *query, const size_t K, const uint32_t L, uint32_t *indices, float *distances);
-
+    
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint64_t, uint32_t>::search_with_filters<
     uint64_t>(const float *query, const uint32_t &filter_label, const size_t K, const uint32_t L, uint64_t *indices,
               float *distances);
