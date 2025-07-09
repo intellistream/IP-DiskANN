@@ -155,6 +155,7 @@ void build_incremental_index(const std::string &data_path, diskann::IndexWritePa
     size_t dim, aligned_dim;
     size_t num_points;
     diskann::get_bin_metadata(data_path, num_points, dim);
+    std::cout << "Data dimension: " << dim << ", num_points: " << num_points << std::endl;
     aligned_dim = ROUND_UP(dim, 8);
     bool has_labels = label_file != "";
     using TagT = uint32_t;

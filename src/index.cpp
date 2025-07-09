@@ -2987,7 +2987,6 @@ int Index<T, TagT, LabelT>::insert_point(const T *point, const TagT tag, const s
 #endif
     } // cant insert as active pts >= max_pts
     dl.unlock();
-
     // Insert tag and mapping to location
     if (_enable_tags)
     {
@@ -3002,9 +3001,7 @@ int Index<T, TagT, LabelT>::insert_point(const T *point, const TagT tag, const s
         _location_to_tag.set(location, tag);
     }
     tl.unlock();
-
     _data_store->set_vector(location, point); // update datastore
-
     // Find and add appropriate graph edges
     ScratchStoreManager<InMemQueryScratch<T>> manager(_query_scratch);
     auto scratch = manager.scratch_space();
@@ -3042,7 +3039,6 @@ int Index<T, TagT, LabelT>::insert_point(const T *point, const TagT tag, const s
         if (_conc_consolidate)
             tlock.unlock();
     }
-
     inter_insert(location, pruned_list, scratch);
 
     return 0;
@@ -3077,26 +3073,26 @@ int Index<T, TagT, LabelT>::insert_point(const T *point, const TagT tag, const s
 //     }
 // }
 
-// template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>::lazy_delete(const TagT &tag)
-// {
-//     std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
-//     std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
-//     std::unique_lock<std::shared_timed_mutex> dl(_delete_lock);
-//     _data_compacted = false;
+template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>::lazy_delete(const TagT &tag)
+{
+    std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
+    std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
+    std::unique_lock<std::shared_timed_mutex> dl(_delete_lock);
+    _data_compacted = false;
 
-//     if (_tag_to_location.find(tag) == _tag_to_location.end())
-//     {
-//         diskann::cerr << "Delete tag not found " << get_tag_string(tag) << std::endl;
-//         return -1;
-//     }
-//     assert(_tag_to_location[tag] < _max_points);
+    if (_tag_to_location.find(tag) == _tag_to_location.end())
+    {
+        diskann::cerr << "Delete tag not found " << get_tag_string(tag) << std::endl;
+        return -1;
+    }
+    assert(_tag_to_location[tag] < _max_points);
 
-//     const auto location = _tag_to_location[tag];
-//     _delete_set->insert(location);
-//     _location_to_tag.erase(location);
-//     _tag_to_location.erase(tag);
-//     return 0;
-// }
+    const auto location = _tag_to_location[tag];
+    _delete_set->insert(location);
+    _location_to_tag.erase(location);
+    _tag_to_location.erase(tag);
+    return 0;
+}
 
 // template <typename T, typename TagT, typename LabelT>
 // void Index<T, TagT, LabelT>::lazy_delete(const std::vector<TagT> &tags, std::vector<TagT> &failed_tags)
@@ -3297,8 +3293,8 @@ int Index<T, TagT, LabelT>::inplace_delete(const TagT &tag, const uint32_t l_d, 
         }
     }
     
-    diskann::cout << "Successfully deleted point with tag " << get_tag_string(tag) << " (id: " << p 
-                  << "), found " << approx_in_neighbors.size() << " approximate in-neighbors" << std::endl;
+    // diskann::cout << "Successfully deleted point with tag " << get_tag_string(tag) << " (id: " << p
+    //               << "), found " << approx_in_neighbors.size() << " approximate in-neighbors" << std::endl;
     return 0;
 }
 

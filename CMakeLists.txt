@@ -18,14 +18,15 @@
 # Some variables like MSVC are defined only after project(), so put that first.
 cmake_minimum_required(VERSION 3.15)
 project(diskann)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_STANDARD 17)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(NOT MSVC)
-	set(CMAKE_CXX_COMPILER g++)
-endif()
+#if(NOT MSVC)
+#	set(CMAKE_CXX_COMPILER g++)
+#endif()
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH}")
 
@@ -331,6 +332,8 @@ if (RESTAPI)
 endif()
 
 include(clang-format.cmake)
+#add_subdirectory(extern/pybind11)
+add_subdirectory(bindings)
 
 if(PYBIND)
     add_subdirectory(python)

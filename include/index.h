@@ -26,7 +26,7 @@
 #include "pq_data_store.h"
 
 #define OVERHEAD_FACTOR 1.1
-#define EXPAND_IF_FULL 0
+#define EXPAND_IF_FULL 1
 #define DEFAULT_MAXC 750
 
 namespace diskann
