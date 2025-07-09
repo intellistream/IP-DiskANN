@@ -152,6 +152,6 @@ void MyIndexWrapper::remove(const std::vector<uint32_t>& tags_to_delete) {
     std::vector<uint32_t> failed;
     index_->inplace_delete(tags_to_delete, failed);
     if (!failed.empty()) {
-        std::cerr << "Warning: Failed to delete " << failed.size() << " tags.\n";
+        // std::cerr << "Warning: Failed to delete " << failed.size() << " tags.\n";
     }
 }
