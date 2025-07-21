@@ -1,6 +1,3 @@
-//
-// Created by mingqi on 25-6-17.
-//
 #include "index_wrapper.h"
 #include "index_factory.h"
 
@@ -55,7 +52,6 @@ void MyIndexWrapper::batch_query(const float* queries, size_t num_queries, size_
                     std::vector<std::vector<float>>& all_distances,
                     int num_threads) {
 
-    // 预分配结果存储空间
     all_result_tags.resize(num_queries);
     all_distances.resize(num_queries);
 
@@ -64,7 +60,6 @@ void MyIndexWrapper::batch_query(const float* queries, size_t num_queries, size_
         all_distances[i].resize(K);
     }
 
-    // 使用OpenMP并行化查询
     size_t num_failed = 0;
 
 #pragma omp parallel for num_threads(num_threads) schedule(dynamic) reduction(+:num_failed)
@@ -73,7 +68,6 @@ void MyIndexWrapper::batch_query(const float* queries, size_t num_queries, size_
             const float* query_ptr = queries + i * dim;
             std::vector<float*> res_vectors;
 
-            // 执行单个查询
             int search_result = index_->search_with_tags(
                 query_ptr, K, L_,
                 all_result_tags[i].data(),
@@ -107,7 +101,6 @@ std::vector<bool> MyIndexWrapper::insert_points_concurrent(const float* data,
                                              int32_t thread_count) {
     if (!index_) throw std::runtime_error("Index not initialized");
 
-    // 如果 thread_count 为 -1，使用系统默认线程数
     if (thread_count <= 0) {
         thread_count = omp_get_max_threads();
     }

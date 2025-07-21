@@ -1,6 +1,3 @@
-//
-// Created by mingqi on 25-6-17.
-//
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
@@ -50,7 +47,6 @@ PYBIND11_MODULE(ipdiskann, m) {
             self.batch_query(queries.data(), num_queries, dim, K,
                            all_tags, all_dists, num_threads);
 
-            // 转换为numpy数组
             py::array_t<uint32_t> result_tags = py::array_t<uint32_t>(
                 py::buffer_info(
                     nullptr,
@@ -73,7 +69,6 @@ PYBIND11_MODULE(ipdiskann, m) {
                 )
             );
 
-            // 复制数据
             auto tags_ptr = static_cast<uint32_t*>(result_tags.mutable_unchecked<2>().mutable_data(0, 0));
             auto dists_ptr = static_cast<float*>(result_dists.mutable_unchecked<2>().mutable_data(0, 0));
 
@@ -103,7 +98,7 @@ PYBIND11_MODULE(ipdiskann, m) {
                         py::array_t<float, py::array::c_style | py::array::forcecast> X,
                         py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tags,
                         int32_t thread_count = -1) {
-        // 检查输入维度
+
         if (X.ndim() != 2)
             throw std::runtime_error("insert_concurrent(): X must be 2D array");
         if (tags.ndim() != 1)
@@ -123,7 +118,6 @@ PYBIND11_MODULE(ipdiskann, m) {
                 thread_count
             );
 
-            // 转换为 Python 列表
             py::list py_results;
             for (bool result : results) {
                 py_results.append(result);
