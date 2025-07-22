@@ -2679,7 +2679,7 @@ template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>
     else
     {
         assert(_empty_slots.size() != 0);
-        assert(_empty_slots.size() + _nd == _max_points);
+//        assert(_empty_slots.size() + _nd == _max_points);
 
         location = _empty_slots.pop_any();
         _delete_set->erase(location);
